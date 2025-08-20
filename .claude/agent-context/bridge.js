@@ -85,6 +85,39 @@ class AgentContextBridge {
   }
 
   /**
+   * Get agent suggestions for a file change
+   */
+  async getAgentSuggestions(changeEvent) {
+    const cacheKey = `suggestions_${this.hashChangeEvent(changeEvent)}`;
+    
+    // Check memory cache
+    if (this.isMemoryCacheValid(cacheKey)) {
+      return this.memoryCache.get(cacheKey);
+    }
+
+    // Try to get suggestions from service
+    try {
+      const response = await this.fetchFromService('/api/evolution/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          applicationId: this.getApplicationId(),
+          ...changeEvent
+        })
+      });
+
+      if (response && response.success) {
+        this.setMemoryCache(cacheKey, response);
+        return response;
+      }
+    } catch (error) {
+      console.warn('Failed to get agent suggestions:', error.message);
+    }
+
+    return { suggestions: [], agentResponses: 0 };
+  }
+
+  /**
    * Generate Claude Code context with agent insights
    */
   async generateClaudeContext() {
@@ -118,8 +151,8 @@ class AgentContextBridge {
       context += `**Purpose**: ${agent.purpose}\n`;
       context += `**Performance**: ${agent.performance.suggestionsGenerated} suggestions generated\n`;
       
-      if (agent.patterns?.length > 0) {
-        context += `**Learned Patterns**: ${agent.patterns.length} patterns recognized\n`;
+      if (agent.patterns > 0) {
+        context += `**Learned Patterns**: ${agent.patterns} patterns recognized\n`;
       }
       
       context += `**Capabilities**: ${agent.capabilities.join(', ')}\n`;
@@ -249,11 +282,23 @@ Once activated, specialized agents will monitor your code changes and provide in
     });
   }
 
+  hashChangeEvent(changeEvent) {
+    return require('crypto')
+      .createHash('md5')
+      .update(JSON.stringify(changeEvent))
+      .digest('hex')
+      .substring(0, 8);
+  }
+
   /**
    * Public API for hooks
    */
   async refreshContext() {
     await this.generateClaudeContext();
+  }
+
+  async trackChange(changeEvent) {
+    return await this.getAgentSuggestions(changeEvent);
   }
 
   async getQuickSuggestions(filePath) {

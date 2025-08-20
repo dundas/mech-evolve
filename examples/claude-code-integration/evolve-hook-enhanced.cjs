@@ -47,7 +47,7 @@ function getApplicationId() {
 
 // Enhanced change event with more context
 function createChangeEvent() {
-  const filePath = FILE_PATH || FILE_NAME || 'unknown';
+  const filePath = FILE_PATH || 'unknown';
   const ext = path.extname(filePath);
   
   // Determine change type based on tool and file

@@ -11,6 +11,36 @@ import { AgentFactory, ChangeEvent } from './services/agent-factory';
 
 dotenv.config();
 
+// Type definitions for Agent
+interface Agent {
+  id: string;
+  name: string;
+  role: string;
+  tier: number;
+  priority: string;
+  status: string;
+  performance: {
+    suggestionsGenerated: number;
+    suggestionsAccepted: number;
+    successRate: number;
+  };
+  memory?: {
+    patterns?: Array<{
+      pattern: string;
+      frequency: number;
+      confidence: number;
+    }>;
+    recentContext?: any[];
+  };
+  specification?: {
+    analysisLogic?: string;
+    improvementStrategies?: string[];
+    learningMechanisms?: string[];
+  };
+  lastActive: string;
+  capabilities: string[];
+}
+
 const app = express();
 const PORT = process.env.PORT || 3011;
 const SERVICE_NAME = 'mech-evolve';
@@ -668,6 +698,15 @@ app.post('/api/agents/:applicationId/sync-to-files', async (req: Request, res: R
       });
     }
 
+    // Validate path exists and is accessible
+    const fs = require('fs');
+    if (!fs.existsSync(projectPath)) {
+      return res.status(400).json({
+        success: false,
+        error: 'projectPath does not exist or is not accessible'
+      });
+    }
+
     const agents = await agentFactory.getActiveAgents(applicationId);
     
     if (agents.length === 0) {
@@ -721,7 +760,7 @@ app.get('/api/agents/:applicationId/claude-context', async (req: Request, res: R
 });
 
 // Helper Functions for Agent-File Sync
-async function syncAgentsToFiles(applicationId: string, agents: any[], projectPath: string): Promise<number> {
+async function syncAgentsToFiles(applicationId: string, agents: Agent[], projectPath: string): Promise<number> {
   const fs = require('fs').promises;
   const path = require('path');
   
@@ -777,8 +816,8 @@ async function syncAgentsToFiles(applicationId: string, agents: any[], projectPa
   }
 }
 
-function generateAgentMarkdown(agent: any): string {
-  const patterns = agent.memory?.patterns?.map((p: any) => 
+function generateAgentMarkdown(agent: Agent): string {
+  const patterns = agent.memory?.patterns?.map(p => 
     `- ${p.pattern}: seen ${p.frequency} times (confidence: ${p.confidence})`
   ).join('\n') || 'No patterns learned yet';
 
@@ -829,7 +868,7 @@ ${agent.specification?.learningMechanisms?.map((m: string) => `- ${m}`).join('\n
 `;
 }
 
-function generateClaudeContext(agents: any[]): string {
+function generateClaudeContext(agents: Agent[]): string {
   const activeAgents = agents.filter(a => a.status === 'active' || a.status === 'learning');
   
   if (activeAgents.length === 0) {

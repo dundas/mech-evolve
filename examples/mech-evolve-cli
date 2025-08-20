@@ -1,0 +1,195 @@
+#!/usr/bin/env node
+/**
+ * Mech-Evolve CLI - Enable/disable evolution tracking in any project
+ * Copy this file to your project root and make it executable: chmod +x mech-evolve
+ */
+
+const fs = require('fs');
+const path = require('path');
+
+const EVOLVE_URL = process.env.MECH_EVOLVE_URL || 'http://localhost:3011';
+const command = process.argv[2] || 'status';
+
+function getApplicationId() {
+  try {
+    const PM = require('./.claude/hooks/project-id-manager.cjs');
+    return new PM(process.cwd()).getApplicationId();
+  } catch (e) {
+    return path.basename(process.cwd());
+  }
+}
+
+function ensureClaudeDir() {
+  const dirs = [
+    '.claude',
+    '.claude/hooks',
+    '.claude/agent-context',
+    '.claude/agent-context/cache',
+    '.claude/agents'
+  ];
+  
+  dirs.forEach(dir => {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  });
+}
+
+const settings = {
+  hooks: {
+    PreToolUse: [{
+      matcher: "Edit|Write|MultiEdit",
+      hooks: [{
+        type: "command",
+        command: "node .claude/hooks/context-provider.cjs"
+      }]
+    }],
+    PostToolUse: [{
+      matcher: "Edit|Write|MultiEdit|Bash",
+      hooks: [{
+        type: "command",
+        command: "node .claude/hooks/evolve-hook-enhanced.cjs"
+      }]
+    }]
+  },
+  agentIntegration: {
+    enabled: true,
+    contextRefreshInterval: 300000,
+    cacheTimeout: 300000,
+    fallbackMode: "graceful"
+  }
+};
+
+switch (command) {
+  case 'on':
+    ensureClaudeDir();
+    fs.writeFileSync('.claude/settings-enhanced.json', JSON.stringify(settings, null, 2));
+    console.log('🚀 Evolution ENABLED - Agents will now track your code changes');
+    console.log('📋 Application ID:', getApplicationId());
+    console.log('');
+    console.log('Next steps:');
+    console.log('1. Ensure mech-evolve service is running: cd mech-evolve && npm start');
+    console.log('2. Create agents: curl -X POST http://localhost:3011/api/agents/analyze-project \\');
+    console.log('   -H "Content-Type: application/json" \\');
+    console.log(`   -d '{"applicationId":"${getApplicationId()}","projectPath":"${process.cwd()}"}'`);
+    break;
+    
+  case 'off':
+    if (fs.existsSync('.claude/settings-enhanced.json')) {
+      fs.writeFileSync('.claude/settings-enhanced.json', JSON.stringify({hooks: {}}, null, 2));
+    }
+    console.log('🛑 Evolution DISABLED - Agents are no longer tracking changes');
+    break;
+    
+  case 'status':
+    const enabled = fs.existsSync('.claude/settings-enhanced.json') && 
+                   fs.readFileSync('.claude/settings-enhanced.json', 'utf-8').includes('evolve-hook');
+    console.log(enabled ? '🟢 Evolution ACTIVE' : '⭕ Evolution INACTIVE');
+    console.log('📋 Application ID:', getApplicationId());
+    
+    if (enabled) {
+      console.log('📁 Claude directory:', fs.existsSync('.claude') ? 'EXISTS' : 'NOT FOUND');
+      console.log('🔗 Service URL:', EVOLVE_URL);
+      
+      // Check for agents
+      const agentFiles = fs.existsSync('.claude/agents') ? 
+        fs.readdirSync('.claude/agents').filter(f => f.endsWith('.md')) : [];
+      if (agentFiles.length > 0) {
+        console.log(`🤖 Active agents: ${agentFiles.length}`);
+        agentFiles.forEach(f => console.log(`   - ${f.replace('.md', '')}`));
+      }
+    }
+    break;
+    
+  case 'agents':
+    console.log('📊 Checking agents for:', getApplicationId());
+    const http = require('http');
+    const url = new URL(`/api/agents/${getApplicationId()}`, EVOLVE_URL);
+    
+    http.get(url, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const result = JSON.parse(data);
+          if (result.success && result.agents) {
+            console.log(`\n🤖 ${result.agents.length} agents found:\n`);
+            result.agents.forEach(agent => {
+              console.log(`${agent.name} (${agent.role})`);
+              console.log(`  Status: ${agent.status}`);
+              console.log(`  Tier: ${agent.tier} - ${agent.priority}`);
+              console.log(`  Performance: ${agent.performance.suggestionsGenerated} suggestions`);
+              console.log('');
+            });
+          } else {
+            console.log('❌ No agents found. Create them with:');
+            console.log(`./mech-evolve create`);
+          }
+        } catch (e) {
+          console.log('❌ Failed to fetch agents. Is mech-evolve service running?');
+        }
+      });
+    }).on('error', () => {
+      console.log('❌ Cannot connect to mech-evolve service at', EVOLVE_URL);
+      console.log('Start it with: cd mech-evolve && npm start');
+    });
+    break;
+    
+  case 'create':
+    console.log('🔄 Creating agents for:', getApplicationId());
+    const postData = JSON.stringify({
+      applicationId: getApplicationId(),
+      projectPath: process.cwd()
+    });
+    
+    const options = {
+      hostname: new URL(EVOLVE_URL).hostname,
+      port: new URL(EVOLVE_URL).port || 80,
+      path: '/api/agents/analyze-project',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': postData.length
+      }
+    };
+    
+    const req = require('http').request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const result = JSON.parse(data);
+          if (result.success) {
+            console.log(`✅ Created ${result.agentsCreated} agents!`);
+            if (result.agents) {
+              result.agents.forEach(agent => {
+                console.log(`   🤖 ${agent.name} - ${agent.role}`);
+              });
+            }
+          } else {
+            console.log('❌ Failed to create agents:', result.error);
+          }
+        } catch (e) {
+          console.log('❌ Invalid response from service');
+        }
+      });
+    });
+    
+    req.on('error', () => {
+      console.log('❌ Cannot connect to mech-evolve service');
+    });
+    
+    req.write(postData);
+    req.end();
+    break;
+    
+  default:
+    console.log('Usage: ./mech-evolve [on|off|status|agents|create]');
+    console.log('');
+    console.log('Commands:');
+    console.log('  on      - Enable evolution tracking');
+    console.log('  off     - Disable evolution tracking');
+    console.log('  status  - Check evolution status');
+    console.log('  agents  - List active agents');
+    console.log('  create  - Create agents for this project');
+}

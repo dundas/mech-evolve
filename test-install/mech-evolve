@@ -1,0 +1,22 @@
+#!/usr/bin/env node
+const fs = require('fs'); const http = require('http'); const https = require('https');
+const os = require('os'); const path = require('path');
+const EVOLVE_URL = process.env.MECH_EVOLVE_URL || 'http://evolve.mech.is';
+const command = process.argv[2] || 'status';
+function getApplicationId() {
+  try {
+    const PM = require('./.claude/hooks/project-id-manager.cjs');
+    return new PM(process.cwd()).getApplicationId();
+  } catch (e) { return path.basename(process.cwd()); }
+}
+const settings = {hooks:{PostToolUse:[{matcher:"Edit|Write|MultiEdit|Bash",hooks:[{type:"command",command:"node .claude/hooks/evolve-hook.cjs"}]}]}};
+switch (command) {
+  case 'on': fs.writeFileSync('.claude/settings.json', JSON.stringify(settings, null, 2)); console.log('🚀 Evolution ENABLED'); break;
+  case 'off': fs.writeFileSync('.claude/settings.json', JSON.stringify({hooks:{}}, null, 2)); console.log('🛑 Evolution DISABLED'); break;
+  case 'status': 
+    const enabled = fs.existsSync('.claude/settings.json') && fs.readFileSync('.claude/settings.json', 'utf-8').includes('evolve-hook');
+    console.log(enabled ? '🟢 Evolution ACTIVE' : '⭕ Evolution INACTIVE');
+    if (enabled) console.log('📋 App ID:', getApplicationId());
+    break;
+  default: console.log('Usage: ./mech-evolve [on|off|status]');
+}

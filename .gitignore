@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build output
+dist/
+build/
+*.js.map
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+test-install/
+.claude/agent-context/cache/
+.claude/agent-context/current-agents.md
+.claude/agents/
+*.test.js.snap
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Local development
+.claude/hook-debug.log
+.claude/progress.log
+
+# Keep examples
+!examples/
+!examples/**/*

@@ -655,7 +655,249 @@ app.get('/api/agents/:applicationId/:agentId/memory', async (req: Request, res: 
   }
 });
 
-// Helper Functions
+// Sync Agents to Files (Claude Code Integration)
+app.post('/api/agents/:applicationId/sync-to-files', async (req: Request, res: Response) => {
+  try {
+    const { applicationId } = req.params;
+    const { projectPath } = req.body;
+    
+    if (!projectPath) {
+      return res.status(400).json({
+        success: false,
+        error: 'projectPath is required'
+      });
+    }
+
+    const agents = await agentFactory.getActiveAgents(applicationId);
+    
+    if (agents.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No active agents to sync',
+        filesSynced: 0
+      });
+    }
+
+    const filesSynced = await syncAgentsToFiles(applicationId, agents, projectPath);
+    
+    res.json({
+      success: true,
+      message: `Synced ${agents.length} agents to ${filesSynced} files`,
+      agentCount: agents.length,
+      filesSynced
+    });
+
+  } catch (error) {
+    logger.error('Error syncing agents to files:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to sync agents to files' 
+    });
+  }
+});
+
+// Generate Claude Context
+app.get('/api/agents/:applicationId/claude-context', async (req: Request, res: Response) => {
+  try {
+    const { applicationId } = req.params;
+    const agents = await agentFactory.getActiveAgents(applicationId);
+    
+    const context = generateClaudeContext(agents);
+    
+    res.json({
+      success: true,
+      context,
+      agentCount: agents.length,
+      generatedAt: new Date().toISOString()
+    });
+
+  } catch (error) {
+    logger.error('Error generating Claude context:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to generate Claude context' 
+    });
+  }
+});
+
+// Helper Functions for Agent-File Sync
+async function syncAgentsToFiles(applicationId: string, agents: any[], projectPath: string): Promise<number> {
+  const fs = require('fs').promises;
+  const path = require('path');
+  
+  const claudeDir = path.join(projectPath, '.claude');
+  const agentsDir = path.join(claudeDir, 'agents');
+  const contextDir = path.join(claudeDir, 'agent-context');
+  
+  try {
+    // Ensure directories exist
+    await fs.mkdir(agentsDir, { recursive: true });
+    await fs.mkdir(contextDir, { recursive: true });
+    
+    let filesSynced = 0;
+    
+    // Create individual agent files
+    for (const agent of agents) {
+      const agentFile = path.join(agentsDir, `${agent.name.toLowerCase()}.md`);
+      const agentContent = generateAgentMarkdown(agent);
+      await fs.writeFile(agentFile, agentContent, 'utf-8');
+      filesSynced++;
+    }
+    
+    // Create agents summary
+    const summaryFile = path.join(contextDir, 'agents-summary.json');
+    const summary = {
+      applicationId,
+      agentCount: agents.length,
+      agents: agents.map(a => ({
+        name: a.name,
+        role: a.role,
+        tier: a.tier,
+        status: a.status,
+        patterns: a.memory?.patterns?.length || 0,
+        performance: a.performance
+      })),
+      lastUpdated: new Date().toISOString()
+    };
+    await fs.writeFile(summaryFile, JSON.stringify(summary, null, 2), 'utf-8');
+    filesSynced++;
+    
+    // Create Claude context file
+    const contextFile = path.join(contextDir, 'current-agents.md');
+    const context = generateClaudeContext(agents);
+    await fs.writeFile(contextFile, context, 'utf-8');
+    filesSynced++;
+    
+    logger.info(`Synced ${agents.length} agents to ${filesSynced} files in ${projectPath}`);
+    return filesSynced;
+    
+  } catch (error) {
+    logger.error('Error syncing agents to files:', error);
+    throw error;
+  }
+}
+
+function generateAgentMarkdown(agent: any): string {
+  const patterns = agent.memory?.patterns?.map((p: any) => 
+    `- ${p.pattern}: seen ${p.frequency} times (confidence: ${p.confidence})`
+  ).join('\n') || 'No patterns learned yet';
+
+  const recentContext = Object.entries(agent.memory?.context || {})
+    .map(([key, value]: [string, any]) => `- ${key}: ${value.filePath || 'unknown'}`)
+    .join('\n') || 'No recent activity';
+
+  return `# ${agent.name} Agent
+
+## Role
+${agent.role}
+
+## Purpose
+${agent.purpose}
+
+## Status
+- **Current Status**: ${agent.status}
+- **Tier**: ${agent.tier}
+- **Priority**: ${agent.priority}
+- **Last Active**: ${new Date(agent.lastActive).toLocaleString()}
+
+## Learned Patterns
+${patterns}
+
+## Recent Context
+${recentContext}
+
+## Capabilities
+${agent.capabilities?.map((cap: string) => `- ${cap}`).join('\n') || 'No capabilities defined'}
+
+## Performance
+- **Suggestions Generated**: ${agent.performance?.suggestionsGenerated || 0}
+- **Success Rate**: ${agent.performance?.successRate || 0}
+
+## Specification
+### Analysis Logic
+${agent.specification?.analysisLogic || 'No analysis logic defined'}
+
+### Improvement Strategies
+${agent.specification?.improvementStrategies?.map((s: string) => `- ${s}`).join('\n') || 'No strategies defined'}
+
+### Learning Mechanisms
+${agent.specification?.learningMechanisms?.map((m: string) => `- ${m}`).join('\n') || 'No learning mechanisms defined'}
+
+---
+*This file is auto-generated and updated by mech-evolve based on agent learning*
+*Last updated: ${new Date().toLocaleString()}*
+`;
+}
+
+function generateClaudeContext(agents: any[]): string {
+  const activeAgents = agents.filter(a => a.status === 'active' || a.status === 'learning');
+  
+  if (activeAgents.length === 0) {
+    return `# AI Agent System Available
+
+Your project is configured with mech-evolve dynamic agents, but no agents are currently active.
+
+To activate agents for this project, run:
+\`\`\`bash
+curl -X POST http://localhost:3011/api/agents/analyze-project \\
+  -H "Content-Type: application/json" \\
+  -d '{"applicationId":"your-app-id","projectPath":"$(pwd)"}'
+\`\`\`
+
+Once activated, specialized agents will monitor your code changes and provide intelligent suggestions.
+
+---
+*Check agent status: ./mech-evolve status*`;
+  }
+
+  let context = `# Active AI Agents for This Project\n\n`;
+  context += `You have ${activeAgents.length} specialized AI agents monitoring and improving this codebase:\n\n`;
+
+  activeAgents.forEach(agent => {
+    context += `## ${agent.name} (${agent.role})\n`;
+    context += `**Purpose**: ${agent.purpose}\n`;
+    context += `**Performance**: ${agent.performance?.suggestionsGenerated || 0} suggestions generated\n`;
+    
+    if (agent.memory?.patterns?.length > 0) {
+      context += `**Learned Patterns**: ${agent.memory.patterns.length} patterns recognized\n`;
+      const topPattern = agent.memory.patterns.reduce((top: any, p: any) => 
+        p.frequency > top.frequency ? p : top
+      );
+      context += `**Most Common Pattern**: ${topPattern.pattern} (${topPattern.frequency} occurrences)\n`;
+    }
+    
+    context += `**Capabilities**: ${agent.capabilities?.join(', ') || 'General analysis'}\n`;
+    context += `**Priority**: ${agent.priority} (Tier ${agent.tier})\n\n`;
+  });
+
+  context += `## Agent Collaboration\n`;
+  context += `These agents work together to provide intelligent suggestions. When making code changes, consider their specialized insights and learned patterns from this project.\n\n`;
+  
+  const topAgent = activeAgents.reduce((top, agent) => 
+    (agent.performance?.suggestionsGenerated || 0) > (top.performance?.suggestionsGenerated || 0) ? agent : top
+  );
+  
+  context += `**Most Active Agent**: ${topAgent.name} has provided the most guidance recently.\n\n`;
+  
+  // Add recent learnings
+  const recentPatterns = activeAgents
+    .flatMap(a => a.memory?.patterns || [])
+    .filter((p: any) => p.lastSeen && new Date(p.lastSeen).getTime() > Date.now() - 24 * 60 * 60 * 1000)
+    .sort((a: any, b: any) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime());
+    
+  if (recentPatterns.length > 0) {
+    context += `## Recent Learning (Last 24 Hours)\n`;
+    recentPatterns.slice(0, 3).forEach((pattern: any) => {
+      context += `- **${pattern.pattern}**: observed ${pattern.frequency} times\n`;
+    });
+    context += `\n`;
+  }
+  
+  context += `---\n*Agent status updated: ${new Date().toLocaleString()}*`;
+
+  return context;
+}
+
 async function analyzeForImprovements(filePath: string, changeType: string) {
   // Smart analysis logic here
   const suggestions = [];

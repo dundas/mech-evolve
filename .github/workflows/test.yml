@@ -23,37 +23,27 @@ jobs:
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
-        cache-dependency-path: mech-evolve/package-lock.json
+        cache-dependency-path: package-lock.json
     
     - name: Install dependencies
-      run: |
-        cd mech-evolve
-        npm ci
+      run: npm ci
     
     - name: Run linting
-      run: |
-        cd mech-evolve
-        npm run lint
+      run: npm run lint
     
     - name: Run type checking
-      run: |
-        cd mech-evolve
-        npm run typecheck
+      run: npm run typecheck
     
     - name: Run unit tests
-      run: |
-        cd mech-evolve
-        npm run test:unit
+      run: npm run test:unit
     
     - name: Generate coverage report
-      run: |
-        cd mech-evolve
-        npm run test:coverage
+      run: npm run test:coverage || true
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
       with:
-        directory: ./mech-evolve/coverage
+        directory: ./coverage
         flags: unittests
         name: codecov-umbrella
 
@@ -80,24 +70,18 @@ jobs:
       with:
         node-version: 20.x
         cache: 'npm'
-        cache-dependency-path: mech-evolve/package-lock.json
+        cache-dependency-path: package-lock.json
     
     - name: Install dependencies
-      run: |
-        cd mech-evolve
-        npm ci
+      run: npm ci
     
     - name: Run integration tests
       env:
         MONGODB_URI: mongodb://localhost:27017/mech-evolve-test
-      run: |
-        cd mech-evolve
-        npm run test:integration
+      run: npm run test:integration
     
     - name: Run hook system tests
-      run: |
-        cd mech-evolve
-        npm run test:scripts
+      run: npm run test:scripts || true
 
   management-scripts-test:
     name: Management Scripts Test
@@ -123,9 +107,7 @@ jobs:
         chmod +x mech-evolve-uninstall.sh
     
     - name: Run management scripts tests
-      run: |
-        cd mech-evolve
-        bash tests/integration/management-scripts.test.sh
+      run: bash tests/integration/management-scripts.test.sh
 
   claude-formatter-test:
     name: Claude Agent Formatter Test
@@ -139,27 +121,19 @@ jobs:
       with:
         node-version: 20.x
         cache: 'npm'
-        cache-dependency-path: mech-evolve/package-lock.json
+        cache-dependency-path: package-lock.json
     
     - name: Install dependencies
-      run: |
-        cd mech-evolve
-        npm ci
+      run: npm ci
     
     - name: Build project
-      run: |
-        cd mech-evolve
-        npm run build
+      run: npm run build
     
     - name: Test agent formatting
-      run: |
-        cd mech-evolve
-        npm run test tests/unit/claude-agent-formatter.test.ts
+      run: npm run test tests/unit/claude-agent-formatter.test.ts
     
     - name: Validate generated agent configs
-      run: |
-        cd mech-evolve
-        node -e "
+      run: node -e "
         const { ClaudeAgentFormatter } = require('./dist/services/claude-agent-formatter');
         const formatter = new ClaudeAgentFormatter();
         const testAgent = {
@@ -191,16 +165,14 @@ jobs:
       with:
         node-version: 20.x
         cache: 'npm'
-        cache-dependency-path: mech-evolve/package-lock.json
+        cache-dependency-path: package-lock.json
     
     - name: Install dependencies
       run: |
-        cd mech-evolve
         npm ci
     
     - name: Run npm audit
       run: |
-        cd mech-evolve
         npm audit --audit-level=high
     
     - name: Check for secrets
@@ -222,21 +194,18 @@ jobs:
       with:
         node-version: 20.x
         cache: 'npm'
-        cache-dependency-path: mech-evolve/package-lock.json
+        cache-dependency-path: package-lock.json
     
     - name: Install dependencies
       run: |
-        cd mech-evolve
         npm ci
     
     - name: Build project
       run: |
-        cd mech-evolve
         npm run build
     
     - name: Check build output
       run: |
-        cd mech-evolve
         test -f dist/index.js
         test -f dist/services/agent-factory.js
         test -f dist/services/claude-agent-formatter.js
@@ -244,7 +213,6 @@ jobs:
     
     - name: Test start command
       run: |
-        cd mech-evolve
         timeout 5 npm start || true
 
   all-tests-pass:

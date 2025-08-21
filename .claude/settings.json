@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /Users/kefentse/dev_env/mech/.claude/hooks/evolve-hook.cjs"
+            "command": "node .claude/hooks/evolve-hook.cjs"
           }
         ]
       }

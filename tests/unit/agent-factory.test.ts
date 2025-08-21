@@ -309,7 +309,7 @@ describe('AgentFactory', () => {
         id: 'pattern-test-agent'
       });
 
-      const pattern = updatedAgent?.memory.patterns.find(p => p.pattern === 'file-modify_ts');
+      const pattern = updatedAgent?.memory.patterns.find((p: any) => p.pattern === 'file-modify_ts');
       expect(pattern?.frequency).toBe(3);
       expect(pattern?.lastSeen).not.toEqual(new Date('2024-01-01'));
     });

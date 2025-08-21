@@ -152,16 +152,27 @@ export const createTestChangeEvent = (overrides = {}) => ({
 
 export const createTestCodebaseAnalysis = (overrides = {}) => ({
   applicationId: 'test-app',
-  projectPath: '/test/project',
-  timestamp: new Date(),
-  metrics: {
+  projectType: 'web-application',
+  languages: ['TypeScript', 'JavaScript'],
+  frameworks: ['React', 'Express'],
+  architecture: 'microservices',
+  complexity: 'moderate' as const,
+  fileStructure: {
     totalFiles: 100,
-    totalLines: 10000,
-    languages: { TypeScript: 60, JavaScript: 40 },
-    frameworks: ['React', 'Express'],
-    testCoverage: 75,
-    complexity: 'medium' as const
+    directoryDepth: 5,
+    fileTypes: { '.ts': 60, '.js': 30, '.json': 10 },
+    largestFiles: ['/src/main.ts', '/src/app.ts'],
+    configFiles: ['package.json', 'tsconfig.json']
   },
+  patterns: [
+    {
+      type: 'testing',
+      description: 'Jest testing framework detected',
+      confidence: 0.9,
+      impact: 'high' as const,
+      locations: ['tests/', 'jest.config.js']
+    }
+  ],
   suggestedAgents: [
     {
       name: 'CodeQualityGuardian',
@@ -173,18 +184,6 @@ export const createTestCodebaseAnalysis = (overrides = {}) => ({
       tier: 1 as const,
       reasoning: 'Large codebase needs quality control'
     }
-  ],
-  patterns: {
-    hasTests: true,
-    hasLinting: true,
-    hasTypeScript: true,
-    hasDocker: false,
-    hasCI: true,
-    hasDocumentation: true
-  },
-  recommendations: [
-    'Add TypeScript strict mode',
-    'Increase test coverage to 80%'
   ],
   ...overrides
 });

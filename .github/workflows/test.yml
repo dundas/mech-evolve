@@ -168,12 +168,10 @@ jobs:
         cache-dependency-path: package-lock.json
     
     - name: Install dependencies
-      run: |
-        npm ci
+      run: npm ci
     
     - name: Run npm audit
-      run: |
-        npm audit --audit-level=high
+      run: npm audit --audit-level=high
     
     - name: Check for secrets
       uses: trufflesecurity/trufflehog@main
@@ -197,12 +195,10 @@ jobs:
         cache-dependency-path: package-lock.json
     
     - name: Install dependencies
-      run: |
-        npm ci
+      run: npm ci
     
     - name: Build project
-      run: |
-        npm run build
+      run: npm run build
     
     - name: Check build output
       run: |

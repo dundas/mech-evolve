@@ -16,6 +16,7 @@ interface Agent {
   id: string;
   name: string;
   role: string;
+  purpose?: string;
   tier: number;
   priority: string;
   status: string;
@@ -31,13 +32,14 @@ interface Agent {
       confidence: number;
     }>;
     recentContext?: any[];
+    context?: Record<string, any>;
   };
   specification?: {
     analysisLogic?: string;
     improvementStrategies?: string[];
     learningMechanisms?: string[];
   };
-  lastActive: string;
+  lastActive: string | Date;
   capabilities: string[];
 }
 
@@ -65,6 +67,9 @@ app.use(cors({
   origin: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000'],
   credentials: true
 }));
+
+// Trust proxy for rate limiting behind nginx
+app.set('trust proxy', 1);
 app.use(express.json());
 
 // Rate limiting
@@ -472,6 +477,53 @@ app.post('/api/sync/push', async (req: Request, res: Response) => {
   }
 });
 
+// Get Sync Status
+app.get('/api/sync/status/:projectId', async (req: Request, res: Response) => {
+  try {
+    const { projectId } = req.params;
+
+    // Get recent sync activity
+    const recentSync = await db.collection('sync')
+      .find({ projectId })
+      .sort({ timestamp: -1 })
+      .limit(10)
+      .toArray();
+
+    // Get pending sync count
+    const pendingSync = await db.collection('pending_sync')
+      .countDocuments({ projectId });
+
+    // Get active machines
+    const activeMachines = await db.collection('machines')
+      .find({ projectId, active: true })
+      .toArray();
+
+    res.json({
+      success: true,
+      projectId,
+      status: {
+        lastSync: recentSync[0]?.timestamp || null,
+        pendingSync,
+        activeMachines: activeMachines.length,
+        recentActivity: recentSync.length
+      },
+      recentSync: recentSync.slice(0, 5).map(s => ({
+        id: s.id,
+        type: s.type,
+        timestamp: s.timestamp,
+        machineId: s.machineId
+      }))
+    });
+
+  } catch (error) {
+    logger.error('Error getting sync status:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to get sync status' 
+    });
+  }
+});
+
 // Cross-Machine Sync - Pull
 app.get('/api/sync/pull/:machineId', async (req: Request, res: Response) => {
   try {
@@ -524,6 +576,120 @@ app.get('/api/analytics/metrics/:projectId', async (req: Request, res: Response)
     res.status(500).json({ 
       success: false, 
       error: 'Failed to get metrics' 
+    });
+  }
+});
+
+// Analytics - Trends
+app.get('/api/analytics/trends', async (req: Request, res: Response) => {
+  try {
+    const { period = '30d', projectId } = req.query;
+    const startDate = getStartDate(period as string);
+
+    // Base match condition
+    const matchCondition: any = {
+      timestamp: { $gte: startDate }
+    };
+
+    // Add project filter if specified
+    if (projectId) {
+      matchCondition.$or = [
+        { projectId },
+        { applicationId: projectId }
+      ];
+    }
+
+    // Get daily evolution trends
+    const trendsPipeline = [
+      { $match: matchCondition },
+      {
+        $group: {
+          _id: {
+            date: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp' } },
+            changeType: '$changeType'
+          },
+          count: { $sum: 1 },
+          improvements: { 
+            $sum: { 
+              $cond: { 
+                if: { $and: [{ $ne: ['$improvements', null] }, { $isArray: '$improvements' }] }, 
+                then: { $size: '$improvements' }, 
+                else: 0 
+              } 
+            } 
+          }
+        }
+      },
+      {
+        $group: {
+          _id: '$_id.date',
+          totalChanges: { $sum: '$count' },
+          totalImprovements: { $sum: '$improvements' },
+          byType: {
+            $push: {
+              type: '$_id.changeType',
+              count: '$count',
+              improvements: '$improvements'
+            }
+          }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ];
+
+    const trends = await db.collection('evolutions')
+      .aggregate(trendsPipeline)
+      .toArray();
+
+    // Get top improvement types
+    const topTypesPipeline = [
+      { $match: matchCondition },
+      {
+        $group: {
+          _id: '$changeType',
+          count: { $sum: 1 },
+          improvements: { 
+            $sum: { 
+              $cond: { 
+                if: { $and: [{ $ne: ['$improvements', null] }, { $isArray: '$improvements' }] }, 
+                then: { $size: '$improvements' }, 
+                else: 0 
+              } 
+            } 
+          }
+        }
+      },
+      { $sort: { improvements: -1 } },
+      { $limit: 10 }
+    ];
+
+    const topTypes = await db.collection('evolutions')
+      .aggregate(topTypesPipeline)
+      .toArray();
+
+    res.json({
+      success: true,
+      period,
+      projectId: projectId || 'all',
+      trends: {
+        daily: trends,
+        topTypes,
+        summary: {
+          totalDays: trends.length,
+          totalChanges: trends.reduce((sum, t) => sum + t.totalChanges, 0),
+          totalImprovements: trends.reduce((sum, t) => sum + t.totalImprovements, 0),
+          avgChangesPerDay: trends.length > 0 
+            ? Math.round(trends.reduce((sum, t) => sum + t.totalChanges, 0) / trends.length) 
+            : 0
+        }
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error getting trends:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to get trends' 
     });
   }
 });
@@ -707,9 +873,9 @@ app.post('/api/agents/:applicationId/sync-to-files', async (req: Request, res: R
       });
     }
 
-    const agents = await agentFactory.getActiveAgents(applicationId);
+    const dynamicAgents = await agentFactory.getActiveAgents(applicationId);
     
-    if (agents.length === 0) {
+    if (dynamicAgents.length === 0) {
       return res.json({
         success: true,
         message: 'No active agents to sync',
@@ -717,6 +883,7 @@ app.post('/api/agents/:applicationId/sync-to-files', async (req: Request, res: R
       });
     }
 
+    const agents = dynamicAgents.map(convertDynamicAgentToAgent);
     const filesSynced = await syncAgentsToFiles(applicationId, agents, projectPath);
     
     res.json({
@@ -739,7 +906,8 @@ app.post('/api/agents/:applicationId/sync-to-files', async (req: Request, res: R
 app.get('/api/agents/:applicationId/claude-context', async (req: Request, res: Response) => {
   try {
     const { applicationId } = req.params;
-    const agents = await agentFactory.getActiveAgents(applicationId);
+    const dynamicAgents = await agentFactory.getActiveAgents(applicationId);
+    const agents = dynamicAgents.map(convertDynamicAgentToAgent);
     
     const context = generateClaudeContext(agents);
     
@@ -758,6 +926,28 @@ app.get('/api/agents/:applicationId/claude-context', async (req: Request, res: R
     });
   }
 });
+
+// Helper function to convert DynamicAgent to Agent
+function convertDynamicAgentToAgent(dynamicAgent: any): Agent {
+  return {
+    id: dynamicAgent.id,
+    name: dynamicAgent.name,
+    role: dynamicAgent.role,
+    purpose: dynamicAgent.purpose,
+    tier: dynamicAgent.tier,
+    priority: dynamicAgent.priority,
+    status: dynamicAgent.status,
+    performance: dynamicAgent.performance,
+    memory: {
+      patterns: dynamicAgent.memory?.patterns || [],
+      recentContext: dynamicAgent.memory?.recentContext || [],
+      context: dynamicAgent.memory?.context || {}
+    },
+    specification: dynamicAgent.specification,
+    lastActive: typeof dynamicAgent.lastActive === 'string' ? dynamicAgent.lastActive : dynamicAgent.lastActive.toISOString(),
+    capabilities: dynamicAgent.capabilities || []
+  };
+}
 
 // Helper Functions for Agent-File Sync
 async function syncAgentsToFiles(applicationId: string, agents: Agent[], projectPath: string): Promise<number> {
@@ -821,9 +1011,9 @@ function generateAgentMarkdown(agent: Agent): string {
     `- ${p.pattern}: seen ${p.frequency} times (confidence: ${p.confidence})`
   ).join('\n') || 'No patterns learned yet';
 
-  const recentContext = Object.entries(agent.memory?.context || {})
-    .map(([key, value]: [string, any]) => `- ${key}: ${value.filePath || 'unknown'}`)
-    .join('\n') || 'No recent activity';
+  const recentContext = agent.memory?.recentContext?.length 
+    ? agent.memory.recentContext.slice(0, 5).map((item: any) => `- ${item.action || 'Activity'}: ${item.filePath || 'unknown'}`).join('\n')
+    : 'No recent activity';
 
   return `# ${agent.name} Agent
 
@@ -897,9 +1087,9 @@ Once activated, specialized agents will monitor your code changes and provide in
     context += `**Purpose**: ${agent.purpose}\n`;
     context += `**Performance**: ${agent.performance?.suggestionsGenerated || 0} suggestions generated\n`;
     
-    if (agent.memory?.patterns?.length > 0) {
+    if (agent.memory?.patterns && agent.memory.patterns.length > 0) {
       context += `**Learned Patterns**: ${agent.memory.patterns.length} patterns recognized\n`;
-      const topPattern = agent.memory.patterns.reduce((top: any, p: any) => 
+      const topPattern = agent.memory.patterns.reduce((top, p) => 
         p.frequency > top.frequency ? p : top
       );
       context += `**Most Common Pattern**: ${topPattern.pattern} (${topPattern.frequency} occurrences)\n`;
@@ -976,7 +1166,10 @@ async function calculateMetrics(projectId: string, period: string) {
   const pipeline = [
     {
       $match: {
-        projectId,
+        $or: [
+          { projectId },
+          { applicationId: projectId }
+        ],
         timestamp: { $gte: startDate }
       }
     },
@@ -984,7 +1177,15 @@ async function calculateMetrics(projectId: string, period: string) {
       $group: {
         _id: '$changeType',
         count: { $sum: 1 },
-        improvements: { $sum: { $size: '$improvements' } }
+        improvements: { 
+          $sum: { 
+            $cond: { 
+              if: { $and: [{ $ne: ['$improvements', null] }, { $isArray: '$improvements' }] }, 
+              then: { $size: '$improvements' }, 
+              else: 0 
+            } 
+          } 
+        }
       }
     }
   ];

@@ -34,6 +34,8 @@ app.use((0, cors_1.default)({
     origin: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000'],
     credentials: true
 }));
+// Trust proxy for rate limiting behind nginx
+app.set('trust proxy', 1);
 app.use(express_1.default.json());
 // Rate limiting
 const limiter = (0, express_rate_limit_1.default)({
@@ -396,6 +398,48 @@ app.post('/api/sync/push', async (req, res) => {
         });
     }
 });
+// Get Sync Status
+app.get('/api/sync/status/:projectId', async (req, res) => {
+    try {
+        const { projectId } = req.params;
+        // Get recent sync activity
+        const recentSync = await db.collection('sync')
+            .find({ projectId })
+            .sort({ timestamp: -1 })
+            .limit(10)
+            .toArray();
+        // Get pending sync count
+        const pendingSync = await db.collection('pending_sync')
+            .countDocuments({ projectId });
+        // Get active machines
+        const activeMachines = await db.collection('machines')
+            .find({ projectId, active: true })
+            .toArray();
+        res.json({
+            success: true,
+            projectId,
+            status: {
+                lastSync: recentSync[0]?.timestamp || null,
+                pendingSync,
+                activeMachines: activeMachines.length,
+                recentActivity: recentSync.length
+            },
+            recentSync: recentSync.slice(0, 5).map(s => ({
+                id: s.id,
+                type: s.type,
+                timestamp: s.timestamp,
+                machineId: s.machineId
+            }))
+        });
+    }
+    catch (error) {
+        logger.error('Error getting sync status:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to get sync status'
+        });
+    }
+});
 // Cross-Machine Sync - Pull
 app.get('/api/sync/pull/:machineId', async (req, res) => {
     try {
@@ -439,6 +483,112 @@ app.get('/api/analytics/metrics/:projectId', async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Failed to get metrics'
+        });
+    }
+});
+// Analytics - Trends
+app.get('/api/analytics/trends', async (req, res) => {
+    try {
+        const { period = '30d', projectId } = req.query;
+        const startDate = getStartDate(period);
+        // Base match condition
+        const matchCondition = {
+            timestamp: { $gte: startDate }
+        };
+        // Add project filter if specified
+        if (projectId) {
+            matchCondition.$or = [
+                { projectId },
+                { applicationId: projectId }
+            ];
+        }
+        // Get daily evolution trends
+        const trendsPipeline = [
+            { $match: matchCondition },
+            {
+                $group: {
+                    _id: {
+                        date: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp' } },
+                        changeType: '$changeType'
+                    },
+                    count: { $sum: 1 },
+                    improvements: {
+                        $sum: {
+                            $cond: {
+                                if: { $and: [{ $ne: ['$improvements', null] }, { $isArray: '$improvements' }] },
+                                then: { $size: '$improvements' },
+                                else: 0
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                $group: {
+                    _id: '$_id.date',
+                    totalChanges: { $sum: '$count' },
+                    totalImprovements: { $sum: '$improvements' },
+                    byType: {
+                        $push: {
+                            type: '$_id.changeType',
+                            count: '$count',
+                            improvements: '$improvements'
+                        }
+                    }
+                }
+            },
+            { $sort: { _id: 1 } }
+        ];
+        const trends = await db.collection('evolutions')
+            .aggregate(trendsPipeline)
+            .toArray();
+        // Get top improvement types
+        const topTypesPipeline = [
+            { $match: matchCondition },
+            {
+                $group: {
+                    _id: '$changeType',
+                    count: { $sum: 1 },
+                    improvements: {
+                        $sum: {
+                            $cond: {
+                                if: { $and: [{ $ne: ['$improvements', null] }, { $isArray: '$improvements' }] },
+                                then: { $size: '$improvements' },
+                                else: 0
+                            }
+                        }
+                    }
+                }
+            },
+            { $sort: { improvements: -1 } },
+            { $limit: 10 }
+        ];
+        const topTypes = await db.collection('evolutions')
+            .aggregate(topTypesPipeline)
+            .toArray();
+        res.json({
+            success: true,
+            period,
+            projectId: projectId || 'all',
+            trends: {
+                daily: trends,
+                topTypes,
+                summary: {
+                    totalDays: trends.length,
+                    totalChanges: trends.reduce((sum, t) => sum + t.totalChanges, 0),
+                    totalImprovements: trends.reduce((sum, t) => sum + t.totalImprovements, 0),
+                    avgChangesPerDay: trends.length > 0
+                        ? Math.round(trends.reduce((sum, t) => sum + t.totalChanges, 0) / trends.length)
+                        : 0
+                }
+            }
+        });
+    }
+    catch (error) {
+        logger.error('Error getting trends:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to get trends'
         });
     }
 });
@@ -584,7 +734,241 @@ app.get('/api/agents/:applicationId/:agentId/memory', async (req, res) => {
         });
     }
 });
-// Helper Functions
+// Sync Agents to Files (Claude Code Integration)
+app.post('/api/agents/:applicationId/sync-to-files', async (req, res) => {
+    try {
+        const { applicationId } = req.params;
+        const { projectPath } = req.body;
+        if (!projectPath) {
+            return res.status(400).json({
+                success: false,
+                error: 'projectPath is required'
+            });
+        }
+        // Validate path exists and is accessible
+        const fs = require('fs');
+        if (!fs.existsSync(projectPath)) {
+            return res.status(400).json({
+                success: false,
+                error: 'projectPath does not exist or is not accessible'
+            });
+        }
+        const dynamicAgents = await agentFactory.getActiveAgents(applicationId);
+        if (dynamicAgents.length === 0) {
+            return res.json({
+                success: true,
+                message: 'No active agents to sync',
+                filesSynced: 0
+            });
+        }
+        const agents = dynamicAgents.map(convertDynamicAgentToAgent);
+        const filesSynced = await syncAgentsToFiles(applicationId, agents, projectPath);
+        res.json({
+            success: true,
+            message: `Synced ${agents.length} agents to ${filesSynced} files`,
+            agentCount: agents.length,
+            filesSynced
+        });
+    }
+    catch (error) {
+        logger.error('Error syncing agents to files:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to sync agents to files'
+        });
+    }
+});
+// Generate Claude Context
+app.get('/api/agents/:applicationId/claude-context', async (req, res) => {
+    try {
+        const { applicationId } = req.params;
+        const dynamicAgents = await agentFactory.getActiveAgents(applicationId);
+        const agents = dynamicAgents.map(convertDynamicAgentToAgent);
+        const context = generateClaudeContext(agents);
+        res.json({
+            success: true,
+            context,
+            agentCount: agents.length,
+            generatedAt: new Date().toISOString()
+        });
+    }
+    catch (error) {
+        logger.error('Error generating Claude context:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to generate Claude context'
+        });
+    }
+});
+// Helper function to convert DynamicAgent to Agent
+function convertDynamicAgentToAgent(dynamicAgent) {
+    return {
+        id: dynamicAgent.id,
+        name: dynamicAgent.name,
+        role: dynamicAgent.role,
+        purpose: dynamicAgent.purpose,
+        tier: dynamicAgent.tier,
+        priority: dynamicAgent.priority,
+        status: dynamicAgent.status,
+        performance: dynamicAgent.performance,
+        memory: {
+            patterns: dynamicAgent.memory?.patterns || [],
+            recentContext: dynamicAgent.memory?.recentContext || [],
+            context: dynamicAgent.memory?.context || {}
+        },
+        specification: dynamicAgent.specification,
+        lastActive: typeof dynamicAgent.lastActive === 'string' ? dynamicAgent.lastActive : dynamicAgent.lastActive.toISOString(),
+        capabilities: dynamicAgent.capabilities || []
+    };
+}
+// Helper Functions for Agent-File Sync
+async function syncAgentsToFiles(applicationId, agents, projectPath) {
+    const fs = require('fs').promises;
+    const path = require('path');
+    const claudeDir = path.join(projectPath, '.claude');
+    const agentsDir = path.join(claudeDir, 'agents');
+    const contextDir = path.join(claudeDir, 'agent-context');
+    try {
+        // Ensure directories exist
+        await fs.mkdir(agentsDir, { recursive: true });
+        await fs.mkdir(contextDir, { recursive: true });
+        let filesSynced = 0;
+        // Create individual agent files
+        for (const agent of agents) {
+            const agentFile = path.join(agentsDir, `${agent.name.toLowerCase()}.md`);
+            const agentContent = generateAgentMarkdown(agent);
+            await fs.writeFile(agentFile, agentContent, 'utf-8');
+            filesSynced++;
+        }
+        // Create agents summary
+        const summaryFile = path.join(contextDir, 'agents-summary.json');
+        const summary = {
+            applicationId,
+            agentCount: agents.length,
+            agents: agents.map(a => ({
+                name: a.name,
+                role: a.role,
+                tier: a.tier,
+                status: a.status,
+                patterns: a.memory?.patterns?.length || 0,
+                performance: a.performance
+            })),
+            lastUpdated: new Date().toISOString()
+        };
+        await fs.writeFile(summaryFile, JSON.stringify(summary, null, 2), 'utf-8');
+        filesSynced++;
+        // Create Claude context file
+        const contextFile = path.join(contextDir, 'current-agents.md');
+        const context = generateClaudeContext(agents);
+        await fs.writeFile(contextFile, context, 'utf-8');
+        filesSynced++;
+        logger.info(`Synced ${agents.length} agents to ${filesSynced} files in ${projectPath}`);
+        return filesSynced;
+    }
+    catch (error) {
+        logger.error('Error syncing agents to files:', error);
+        throw error;
+    }
+}
+function generateAgentMarkdown(agent) {
+    const patterns = agent.memory?.patterns?.map(p => `- ${p.pattern}: seen ${p.frequency} times (confidence: ${p.confidence})`).join('\n') || 'No patterns learned yet';
+    const recentContext = agent.memory?.recentContext?.length
+        ? agent.memory.recentContext.slice(0, 5).map((item) => `- ${item.action || 'Activity'}: ${item.filePath || 'unknown'}`).join('\n')
+        : 'No recent activity';
+    return `# ${agent.name} Agent
+
+## Role
+${agent.role}
+
+## Purpose
+${agent.purpose}
+
+## Status
+- **Current Status**: ${agent.status}
+- **Tier**: ${agent.tier}
+- **Priority**: ${agent.priority}
+- **Last Active**: ${new Date(agent.lastActive).toLocaleString()}
+
+## Learned Patterns
+${patterns}
+
+## Recent Context
+${recentContext}
+
+## Capabilities
+${agent.capabilities?.map((cap) => `- ${cap}`).join('\n') || 'No capabilities defined'}
+
+## Performance
+- **Suggestions Generated**: ${agent.performance?.suggestionsGenerated || 0}
+- **Success Rate**: ${agent.performance?.successRate || 0}
+
+## Specification
+### Analysis Logic
+${agent.specification?.analysisLogic || 'No analysis logic defined'}
+
+### Improvement Strategies
+${agent.specification?.improvementStrategies?.map((s) => `- ${s}`).join('\n') || 'No strategies defined'}
+
+### Learning Mechanisms
+${agent.specification?.learningMechanisms?.map((m) => `- ${m}`).join('\n') || 'No learning mechanisms defined'}
+
+---
+*This file is auto-generated and updated by mech-evolve based on agent learning*
+*Last updated: ${new Date().toLocaleString()}*
+`;
+}
+function generateClaudeContext(agents) {
+    const activeAgents = agents.filter(a => a.status === 'active' || a.status === 'learning');
+    if (activeAgents.length === 0) {
+        return `# AI Agent System Available
+
+Your project is configured with mech-evolve dynamic agents, but no agents are currently active.
+
+To activate agents for this project, run:
+\`\`\`bash
+curl -X POST http://localhost:3011/api/agents/analyze-project \\
+  -H "Content-Type: application/json" \\
+  -d '{"applicationId":"your-app-id","projectPath":"$(pwd)"}'
+\`\`\`
+
+Once activated, specialized agents will monitor your code changes and provide intelligent suggestions.
+
+---
+*Check agent status: ./mech-evolve status*`;
+    }
+    let context = `# Active AI Agents for This Project\n\n`;
+    context += `You have ${activeAgents.length} specialized AI agents monitoring and improving this codebase:\n\n`;
+    activeAgents.forEach(agent => {
+        context += `## ${agent.name} (${agent.role})\n`;
+        context += `**Purpose**: ${agent.purpose}\n`;
+        context += `**Performance**: ${agent.performance?.suggestionsGenerated || 0} suggestions generated\n`;
+        if (agent.memory?.patterns && agent.memory.patterns.length > 0) {
+            context += `**Learned Patterns**: ${agent.memory.patterns.length} patterns recognized\n`;
+            const topPattern = agent.memory.patterns.reduce((top, p) => p.frequency > top.frequency ? p : top);
+            context += `**Most Common Pattern**: ${topPattern.pattern} (${topPattern.frequency} occurrences)\n`;
+        }
+        context += `**Capabilities**: ${agent.capabilities?.join(', ') || 'General analysis'}\n`;
+        context += `**Priority**: ${agent.priority} (Tier ${agent.tier})\n\n`;
+    });
+    context += `## Agent Collaboration\n`;
+    context += `These agents work together to provide intelligent suggestions. When making code changes, consider their specialized insights and learned patterns from this project.\n\n`;
+    const topAgent = activeAgents.reduce((top, agent) => (agent.performance?.suggestionsGenerated || 0) > (top.performance?.suggestionsGenerated || 0) ? agent : top);
+    context += `**Most Active Agent**: ${topAgent.name} has provided the most guidance recently.\n\n`;
+    // Add recent learnings
+    const recentPatterns = activeAgents
+        .flatMap(a => a.memory?.patterns || [])
+        .filter((p) => p.lastSeen && new Date(p.lastSeen).getTime() > Date.now() - 24 * 60 * 60 * 1000)
+        .sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime());
+    if (recentPatterns.length > 0) {
+        context += `## Recent Learning (Last 24 Hours)\n`;
+        recentPatterns.slice(0, 3).forEach((pattern) => {
+            context += `- **${pattern.pattern}**: observed ${pattern.frequency} times\n`;
+        });
+        context += `\n`;
+    }
+    context += `---\n*Agent status updated: ${new Date().toLocaleString()}*`;
+    return context;
+}
 async function analyzeForImprovements(filePath, changeType) {
     // Smart analysis logic here
     const suggestions = [];
@@ -619,7 +1003,10 @@ async function calculateMetrics(projectId, period) {
     const pipeline = [
         {
             $match: {
-                projectId,
+                $or: [
+                    { projectId },
+                    { applicationId: projectId }
+                ],
                 timestamp: { $gte: startDate }
             }
         },
@@ -627,7 +1014,15 @@ async function calculateMetrics(projectId, period) {
             $group: {
                 _id: '$changeType',
                 count: { $sum: 1 },
-                improvements: { $sum: { $size: '$improvements' } }
+                improvements: {
+                    $sum: {
+                        $cond: {
+                            if: { $and: [{ $ne: ['$improvements', null] }, { $isArray: '$improvements' }] },
+                            then: { $size: '$improvements' },
+                            else: 0
+                        }
+                    }
+                }
             }
         }
     ];

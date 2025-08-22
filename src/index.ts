@@ -2231,6 +2231,45 @@ app.post('/api/agents/:applicationId/sync-to-files', async (req: Request, res: R
   }
 });
 
+// Remove Agents from Files (Claude Code Integration)
+app.delete('/api/agents/:applicationId/remove-from-files', async (req: Request, res: Response) => {
+  try {
+    const { applicationId } = req.params;
+    const { projectPath } = req.body;
+    
+    if (!projectPath) {
+      return res.status(400).json({
+        success: false,
+        error: 'projectPath is required'
+      });
+    }
+
+    // Validate path exists and is accessible
+    const fs = require('fs');
+    if (!fs.existsSync(projectPath)) {
+      return res.status(400).json({
+        success: false,
+        error: 'projectPath does not exist or is not accessible'
+      });
+    }
+
+    const filesRemoved = await removeAgentsFromFiles(applicationId, projectPath);
+    
+    res.json({
+      success: true,
+      message: `Removed ${filesRemoved} agent files`,
+      filesRemoved
+    });
+
+  } catch (error) {
+    logger.error('Error removing agents from files:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to remove agents from files' 
+    });
+  }
+});
+
 // Generate Claude Context
 app.get('/api/agents/:applicationId/claude-context', async (req: Request, res: Response) => {
   try {
@@ -2279,6 +2318,51 @@ function convertDynamicAgentToAgent(dynamicAgent: any): Agent {
 }
 
 // Helper Functions for Agent-File Sync
+async function removeAgentsFromFiles(applicationId: string, projectPath: string): Promise<number> {
+  const fs = require('fs').promises;
+  const path = require('path');
+  
+  const claudeDir = path.join(projectPath, '.claude');
+  const agentsDir = path.join(claudeDir, 'agents');
+  const contextDir = path.join(claudeDir, 'agent-context');
+  
+  let filesRemoved = 0;
+  
+  try {
+    // Get list of mech-* agent files
+    if (await fs.access(agentsDir).then(() => true).catch(() => false)) {
+      const files = await fs.readdir(agentsDir);
+      
+      for (const file of files) {
+        // Only remove mech-* agent files (leave other agents untouched)
+        if (file.startsWith('mech-') && file.endsWith('.md')) {
+          await fs.unlink(path.join(agentsDir, file));
+          filesRemoved++;
+          logger.info(`Removed agent file: ${file}`);
+        }
+      }
+    }
+    
+    // Remove context files
+    const contextFiles = ['agents-summary.json', 'current-agents.md'];
+    for (const file of contextFiles) {
+      const filePath = path.join(contextDir, file);
+      if (await fs.access(filePath).then(() => true).catch(() => false)) {
+        await fs.unlink(filePath);
+        filesRemoved++;
+        logger.info(`Removed context file: ${file}`);
+      }
+    }
+    
+    logger.info(`Removed ${filesRemoved} agent files from ${projectPath}`);
+    return filesRemoved;
+    
+  } catch (error) {
+    logger.error('Error removing agent files:', error);
+    throw error;
+  }
+}
+
 async function syncAgentsToFiles(applicationId: string, agents: Agent[], projectPath: string): Promise<number> {
   const fs = require('fs').promises;
   const path = require('path');
@@ -2294,10 +2378,11 @@ async function syncAgentsToFiles(applicationId: string, agents: Agent[], project
     
     let filesSynced = 0;
     
-    // Create individual agent files
+    // Create Claude Code-compatible agent files with YAML frontmatter
     for (const agent of agents) {
-      const agentFile = path.join(agentsDir, `${agent.name.toLowerCase()}.md`);
-      const agentContent = generateAgentMarkdown(agent);
+      const agentName = `mech-${agent.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+      const agentFile = path.join(agentsDir, `${agentName}.md`);
+      const agentContent = generateClaudeAgentFile(agent, agentName);
       await fs.writeFile(agentFile, agentContent, 'utf-8');
       filesSynced++;
     }
@@ -2333,6 +2418,70 @@ async function syncAgentsToFiles(applicationId: string, agents: Agent[], project
     logger.error('Error syncing agents to files:', error);
     throw error;
   }
+}
+
+function generateClaudeAgentFile(agent: Agent, agentName: string): string {
+  // Map agent capabilities to Claude Code tools
+  const toolMapping: Record<string, string[]> = {
+    'linting': ['Read', 'Edit', 'MultiEdit'],
+    'formatting': ['Read', 'Edit', 'MultiEdit'],
+    'complexity-analysis': ['Read', 'Grep', 'Glob'],
+    'type-optimization': ['Read', 'Edit', 'MultiEdit', 'Grep'],
+    'generic-analysis': ['Read', 'Grep', 'Glob'],
+    'strict-mode': ['Read', 'Edit'],
+    'test-generation': ['Write', 'Edit', 'Read', 'Bash'],
+    'coverage-analysis': ['Bash', 'Read', 'Grep'],
+    'mocking': ['Write', 'Edit', 'Read']
+  };
+  
+  // Determine tools based on capabilities
+  const tools = new Set<string>();
+  agent.capabilities?.forEach((cap: string) => {
+    const mappedTools = toolMapping[cap] || ['Read', 'Grep'];
+    mappedTools.forEach(tool => tools.add(tool));
+  });
+  
+  // Generate YAML frontmatter and agent prompt
+  const toolsList = Array.from(tools).join(', ');
+  const description = `${agent.purpose}. Tier ${agent.tier} ${agent.role} specialist.`;
+  
+  // Build the agent's system prompt based on learned patterns
+  const patterns = agent.memory?.patterns?.map(p => 
+    `- Pattern "${p.pattern}" observed ${p.frequency} times (confidence: ${p.confidence})`
+  ).join('\n') || '';
+  
+  const systemPrompt = `You are ${agent.name}, a specialized AI agent for code quality and development assistance.
+
+## Your Role
+${agent.purpose}
+
+## Your Expertise
+${agent.capabilities?.map((cap: string) => `- ${cap}`).join('\n') || 'General code assistance'}
+
+## Performance Metrics
+- Suggestions generated: ${agent.performance?.suggestionsGenerated || 0}
+- Success rate: ${agent.performance?.successRate || 0}%
+
+${patterns ? `## Learned Patterns from This Codebase\n${patterns}\n` : ''}
+
+## Your Approach
+1. Analyze code for ${agent.role}-related issues
+2. Provide actionable suggestions based on best practices
+3. Learn from developer feedback to improve recommendations
+4. Focus on ${agent.priority} priority tasks
+
+## Analysis Strategies
+${agent.specification?.improvementStrategies?.map((s: string) => `- ${s}`).join('\n') || '- General code improvement'}
+
+Remember: You are specifically trained for this codebase and should leverage the patterns you've learned to provide contextual, relevant suggestions.`;
+
+  return `---
+name: ${agentName}
+description: "${description}"
+tools: ${toolsList}
+---
+
+${systemPrompt}`;
 }
 
 function generateAgentMarkdown(agent: Agent): string {

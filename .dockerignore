@@ -1,0 +1,73 @@
+# Dependencies
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Build outputs
+build/
+*.tsbuildinfo
+
+# Testing
+coverage/
+.nyc_output/
+tests/
+test-*
+*.test.*
+*.spec.*
+
+# Development files
+.env.local
+.env.development
+*.log
+*.pid
+*.seed
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+.DS_Store
+
+# Git
+.git/
+.gitignore
+.github/
+
+# Documentation
+*.md
+docs/
+LICENSE
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+
+# Claude Code specific
+.claude/
+mech-evolve
+mech-evolve-*
+.mech-evolve-ignore
+
+# Agent artifacts
+memory/
+agent-artifacts/
+test-reports/
+E2E_*
+DOCKER_*
+PRODUCTION_*
+MULTI_*
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup

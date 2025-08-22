@@ -1,0 +1,47 @@
+{
+  "timestamp": "2025-08-21T19:08:54.042Z",
+  "agent": "IntegrationTestingChampion",
+  "summary": {
+    "totalTests": 7,
+    "passedTests": 0,
+    "failedTests": 7,
+    "duration": 863
+  },
+  "results": [
+    {
+      "name": "CLI Basic Commands",
+      "status": "FAIL",
+      "error": "Help command failed: Command failed: node mech-evolve-enhanced help\nnode:internal/modules/package_json_reader:93\n        throw error;\n        ^\n\nSyntaxError: Error parsing /Users/kefentse/dev_env/mech/mech-evolve/test-env-integration/package.json: Unexpected token '/', \"// User fi\"... is not valid JSON\n    at parse (<anonymous>)\n    at read (node:internal/modules/package_json_reader:80:16)\n    at readPackage (node:internal/modules/package_json_reader:141:10)\n    at readPackageScope (node:internal/modules/package_json_reader:164:19)\n    at shouldUseESMLoader (node:internal/modules/run_main:79:15)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:157:24)\n    at node:internal/main/run_main_module:28:49 {\n  path: '/Users/kefentse/dev_env/mech/mech-evolve/test-env-integration/package.json'\n}\n\nNode.js v20.19.0\n"
+    },
+    {
+      "name": "Install to Uninstall Workflow",
+      "status": "FAIL",
+      "error": "Uninstall command failed: Command failed: node mech-evolve-enhanced uninstall\nnode:internal/modules/package_json_reader:93\n        throw error;\n        ^\n\nSyntaxError: Error parsing /Users/kefentse/dev_env/mech/mech-evolve/test-env-integration/package.json: Unexpected token '/', \"// User fi\"... is not valid JSON\n    at parse (<anonymous>)\n    at read (node:internal/modules/package_json_reader:80:16)\n    at readPackage (node:internal/modules/package_json_reader:141:10)\n    at readPackageScope (node:internal/modules/package_json_reader:164:19)\n    at shouldUseESMLoader (node:internal/modules/run_main:79:15)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:157:24)\n    at node:internal/main/run_main_module:28:49 {\n  path: '/Users/kefentse/dev_env/mech/mech-evolve/test-env-integration/package.json'\n}\n\nNode.js v20.19.0\n"
+    },
+    {
+      "name": "User File Preservation",
+      "status": "FAIL",
+      "error": "Command failed: node mech-evolve-enhanced uninstall\nnode:internal/modules/package_json_reader:93\n        throw error;\n        ^\n\nSyntaxError: Error parsing /Users/kefentse/dev_env/mech/mech-evolve/test-env-integration/package.json: Unexpected token '/', \"// User fi\"... is not valid JSON\n    at parse (<anonymous>)\n    at read (node:internal/modules/package_json_reader:80:16)\n    at readPackage (node:internal/modules/package_json_reader:141:10)\n    at readPackageScope (node:internal/modules/package_json_reader:164:19)\n    at shouldUseESMLoader (node:internal/modules/run_main:79:15)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:157:24)\n    at node:internal/main/run_main_module:28:49 {\n  path: '/Users/kefentse/dev_env/mech/mech-evolve/test-env-integration/package.json'\n}\n\nNode.js v20.19.0\n"
+    },
+    {
+      "name": "Settings Backup and Cleanup",
+      "status": "FAIL",
+      "error": "Command failed: node mech-evolve-enhanced uninstall\nnode:internal/modules/package_json_reader:93\n        throw error;\n        ^\n\nSyntaxError: Error parsing /Users/kefentse/dev_env/mech/mech-evolve/test-env-integration/package.json: Unexpected token '/', \"// User fi\"... is not valid JSON\n    at parse (<anonymous>)\n    at read (node:internal/modules/package_json_reader:80:16)\n    at readPackage (node:internal/modules/package_json_reader:141:10)\n    at readPackageScope (node:internal/modules/package_json_reader:164:19)\n    at shouldUseESMLoader (node:internal/modules/run_main:79:15)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:157:24)\n    at node:internal/main/run_main_module:28:49 {\n  path: '/Users/kefentse/dev_env/mech/mech-evolve/test-env-integration/package.json'\n}\n\nNode.js v20.19.0\n"
+    },
+    {
+      "name": "Ignore Patterns Effectiveness",
+      "status": "FAIL",
+      "error": "Command failed: node mech-evolve-enhanced uninstall\nnode:internal/modules/package_json_reader:93\n        throw error;\n        ^\n\nSyntaxError: Error parsing /Users/kefentse/dev_env/mech/mech-evolve/test-env-integration/package.json: Unexpected token '/', \"// User fi\"... is not valid JSON\n    at parse (<anonymous>)\n    at read (node:internal/modules/package_json_reader:80:16)\n    at readPackage (node:internal/modules/package_json_reader:141:10)\n    at readPackageScope (node:internal/modules/package_json_reader:164:19)\n    at shouldUseESMLoader (node:internal/modules/run_main:79:15)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:157:24)\n    at node:internal/main/run_main_module:28:49 {\n  path: '/Users/kefentse/dev_env/mech/mech-evolve/test-env-integration/package.json'\n}\n\nNode.js v20.19.0\n"
+    },
+    {
+      "name": "Partial Installation Handling",
+      "status": "FAIL",
+      "error": "Uninstall failed with partial installation: Command failed: node mech-evolve-enhanced uninstall\nnode:internal/modules/package_json_reader:93\n        throw error;\n        ^\n\nSyntaxError: Error parsing /Users/kefentse/dev_env/mech/mech-evolve/test-env-integration/package.json: Unexpected token '/', \"// User fi\"... is not valid JSON\n    at parse (<anonymous>)\n    at read (node:internal/modules/package_json_reader:80:16)\n    at readPackage (node:internal/modules/package_json_reader:141:10)\n    at readPackageScope (node:internal/modules/package_json_reader:164:19)\n    at shouldUseESMLoader (node:internal/modules/run_main:79:15)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:157:24)\n    at node:internal/main/run_main_module:28:49 {\n  path: '/Users/kefentse/dev_env/mech/mech-evolve/test-env-integration/package.json'\n}\n\nNode.js v20.19.0\n"
+    },
+    {
+      "name": "Cross-Platform Path Handling",
+      "status": "FAIL",
+      "error": "Path handling failed: Command failed: node mech-evolve-enhanced uninstall\nnode:internal/modules/package_json_reader:93\n        throw error;\n        ^\n\nSyntaxError: Error parsing /Users/kefentse/dev_env/mech/mech-evolve/test-env-integration/package.json: Unexpected token '/', \"// User fi\"... is not valid JSON\n    at parse (<anonymous>)\n    at read (node:internal/modules/package_json_reader:80:16)\n    at readPackage (node:internal/modules/package_json_reader:141:10)\n    at readPackageScope (node:internal/modules/package_json_reader:164:19)\n    at shouldUseESMLoader (node:internal/modules/run_main:79:15)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:157:24)\n    at node:internal/main/run_main_module:28:49 {\n  path: '/Users/kefentse/dev_env/mech/mech-evolve/test-env-integration/package.json'\n}\n\nNode.js v20.19.0\n"
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "timestamp": "2025-08-21T19:09:01.337Z",
+  "agent": "EdgeCaseTestingSentinel",
+  "summary": {
+    "totalTests": 10,
+    "passedTests": 3,
+    "failedTests": 7,
+    "duration": 1081
+  },
+  "results": [
+    {
+      "name": "Missing .claude Directory",
+      "status": "PASS",
+      "error": null
+    },
+    {
+      "name": "Corrupted Ignore File",
+      "status": "FAIL",
+      "error": "Uninstall crashed with corrupted ignore file: Command failed: node mech-evolve-enhanced uninstall\nnode:internal/modules/cjs/loader:1215\n  throw err;\n  ^\n\nError: Cannot find module '/Users/kefentse/dev_env/mech/mech-evolve/test-env-edge-cases/mech-evolve-enhanced'\n    at Module._resolveFilename (node:internal/modules/cjs/loader:1212:15)\n    at Module._load (node:internal/modules/cjs/loader:1043:27)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)\n    at node:internal/main/run_main_module:28:49 {\n  code: 'MODULE_NOT_FOUND',\n  requireStack: []\n}\n\nNode.js v20.19.0\n"
+    },
+    {
+      "name": "Read-Only Files and Permissions",
+      "status": "FAIL",
+      "error": "Uninstall failed unexpectedly with read-only files: Command failed: node mech-evolve-enhanced uninstall\nnode:internal/modules/cjs/loader:1215\n  throw err;\n  ^\n\nError: Cannot find module '/Users/kefentse/dev_env/mech/mech-evolve/test-env-edge-cases/mech-evolve-enhanced'\n    at Module._resolveFilename (node:internal/modules/cjs/loader:1212:15)\n    at Module._load (node:internal/modules/cjs/loader:1043:27)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)\n    at node:internal/main/run_main_module:28:49 {\n  code: 'MODULE_NOT_FOUND',\n  requireStack: []\n}\n\nNode.js v20.19.0\n"
+    },
+    {
+      "name": "Very Long File Paths",
+      "status": "PASS",
+      "error": null
+    },
+    {
+      "name": "Special Characters in Filenames",
+      "status": "FAIL",
+      "error": "Uninstall failed with special characters: Command failed: node mech-evolve-enhanced uninstall\nnode:internal/modules/cjs/loader:1215\n  throw err;\n  ^\n\nError: Cannot find module '/Users/kefentse/dev_env/mech/mech-evolve/test-env-edge-cases/mech-evolve-enhanced'\n    at Module._resolveFilename (node:internal/modules/cjs/loader:1212:15)\n    at Module._load (node:internal/modules/cjs/loader:1043:27)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)\n    at node:internal/main/run_main_module:28:49 {\n  code: 'MODULE_NOT_FOUND',\n  requireStack: []\n}\n\nNode.js v20.19.0\n"
+    },
+    {
+      "name": "Corrupted Settings JSON",
+      "status": "FAIL",
+      "error": "Uninstall failed with corrupted settings: Command failed: node mech-evolve-enhanced uninstall\nnode:internal/modules/cjs/loader:1215\n  throw err;\n  ^\n\nError: Cannot find module '/Users/kefentse/dev_env/mech/mech-evolve/test-env-edge-cases/mech-evolve-enhanced'\n    at Module._resolveFilename (node:internal/modules/cjs/loader:1212:15)\n    at Module._load (node:internal/modules/cjs/loader:1043:27)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)\n    at node:internal/main/run_main_module:28:49 {\n  code: 'MODULE_NOT_FOUND',\n  requireStack: []\n}\n\nNode.js v20.19.0\n"
+    },
+    {
+      "name": "Symbolic Links",
+      "status": "PASS",
+      "error": null
+    },
+    {
+      "name": "Concurrent Access Simulation",
+      "status": "FAIL",
+      "error": "Uninstall failed with concurrent access: Command failed: node mech-evolve-enhanced uninstall\nnode:internal/modules/cjs/loader:1215\n  throw err;\n  ^\n\nError: Cannot find module '/Users/kefentse/dev_env/mech/mech-evolve/test-env-edge-cases/mech-evolve-enhanced'\n    at Module._resolveFilename (node:internal/modules/cjs/loader:1212:15)\n    at Module._load (node:internal/modules/cjs/loader:1043:27)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)\n    at node:internal/main/run_main_module:28:49 {\n  code: 'MODULE_NOT_FOUND',\n  requireStack: []\n}\n\nNode.js v20.19.0\n"
+    },
+    {
+      "name": "Empty Directories Cleanup",
+      "status": "FAIL",
+      "error": "Command failed: node mech-evolve-enhanced uninstall\nnode:internal/modules/cjs/loader:1215\n  throw err;\n  ^\n\nError: Cannot find module '/Users/kefentse/dev_env/mech/mech-evolve/test-env-edge-cases/mech-evolve-enhanced'\n    at Module._resolveFilename (node:internal/modules/cjs/loader:1212:15)\n    at Module._load (node:internal/modules/cjs/loader:1043:27)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)\n    at node:internal/main/run_main_module:28:49 {\n  code: 'MODULE_NOT_FOUND',\n  requireStack: []\n}\n\nNode.js v20.19.0\n"
+    },
+    {
+      "name": "Network Filesystem Edge Cases",
+      "status": "FAIL",
+      "error": "Uninstall failed with network filesystem issues: Command failed: node mech-evolve-enhanced uninstall\nnode:internal/modules/cjs/loader:1215\n  throw err;\n  ^\n\nError: Cannot find module '/Users/kefentse/dev_env/mech/mech-evolve/test-env-edge-cases/mech-evolve-enhanced'\n    at Module._resolveFilename (node:internal/modules/cjs/loader:1212:15)\n    at Module._load (node:internal/modules/cjs/loader:1043:27)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)\n    at node:internal/main/run_main_module:28:49 {\n  code: 'MODULE_NOT_FOUND',\n  requireStack: []\n}\n\nNode.js v20.19.0\n"
+    }
+  ]
+}

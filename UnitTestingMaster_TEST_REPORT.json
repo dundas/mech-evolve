@@ -1,0 +1,62 @@
+{
+  "timestamp": "2025-08-21T19:03:24.778Z",
+  "agent": "UnitTestingMaster",
+  "summary": {
+    "totalTests": 10,
+    "passedTests": 7,
+    "failedTests": 3,
+    "duration": 7
+  },
+  "results": [
+    {
+      "name": "Script Loading",
+      "status": "PASS",
+      "error": null
+    },
+    {
+      "name": "Ignore Pattern Loading",
+      "status": "PASS",
+      "error": null
+    },
+    {
+      "name": "Glob to Regex Conversion",
+      "status": "FAIL",
+      "error": "Pattern \"**/*.md\" converted to \".*.*\\/.*\\.md\", expected \".*\\/.*\\.md\""
+    },
+    {
+      "name": "Pattern Matching Logic",
+      "status": "FAIL",
+      "error": "File \"docs/readme.md\" matching result was false, expected true"
+    },
+    {
+      "name": "File List Generation",
+      "status": "PASS",
+      "error": null
+    },
+    {
+      "name": "CLI Command Validation",
+      "status": "PASS",
+      "error": null
+    },
+    {
+      "name": "Settings Backup Logic",
+      "status": "PASS",
+      "error": null
+    },
+    {
+      "name": "Settings Cleanup Logic",
+      "status": "FAIL",
+      "error": "Settings cleanup did not work as expected"
+    },
+    {
+      "name": "Color Output Functions",
+      "status": "PASS",
+      "error": null
+    },
+    {
+      "name": "Environment Variable Handling",
+      "status": "PASS",
+      "error": null
+    }
+  ]
+}

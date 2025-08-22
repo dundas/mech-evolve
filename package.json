@@ -5,9 +5,13 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
+    "build": "npm run clean && tsc && npm run build:metadata",
+    "build:metadata": "node scripts/generate-build-metadata.js",
+    "build:docker": "npm run build && docker build -t mech-evolve:latest .",
+    "build:production": "npm run build && npm run version:verify",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
+    "start:dev": "npm run build:metadata && npm run start",
     "test": "jest",
     "test:unit": "jest tests/unit",
     "test:integration": "jest tests/integration",
@@ -19,8 +23,12 @@
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist coverage .claude/agent-context/cache",
+    "version:check": "node scripts/version-check.js",
+    "version:verify": "npm run version:check && echo 'Version verification passed'",
+    "deploy:check": "curl -f http://localhost:3011/api/version || echo 'Service not running'",
+    "deploy:verify": "node scripts/deployment-verification.js",
     "pretest": "npm run build",
-    "prepublishOnly": "npm run test:all && npm run build"
+    "prepublishOnly": "npm run test:all && npm run build:production"
   },
   "dependencies": {
     "axios": "^1.6.2",

@@ -43,6 +43,373 @@ function ensureClaudeDir() {
   });
 }
 
+// Uninstall configuration and utilities
+const uninstallConfig = {
+  safeFiles: [
+    '.claude/hooks/context-provider.cjs',
+    '.claude/hooks/evolve-hook-enhanced.cjs',
+    '.claude/hooks/evolve-hook.cjs', 
+    '.claude/hooks/project-id-manager.cjs'
+  ],
+  conditionalFiles: [
+    '.claude/settings-enhanced.json',
+    '.claude/settings.json',
+    '.claude/project.json'
+  ],
+  safeDirectories: [
+    '.claude/agent-context',
+    '.claude/agents'
+  ],
+  tempFiles: [
+    '.claude/hook-debug.log'
+  ]
+};
+
+function parseUninstallArgs(args) {
+  const options = {
+    force: false,
+    backup: false,
+    dryRun: false,
+    preserveClaude: false,
+    verbose: false
+  };
+  
+  args.forEach(arg => {
+    switch(arg) {
+      case '--force':
+      case '-f':
+        options.force = true;
+        break;
+      case '--backup':
+      case '-b':
+        options.backup = true;
+        break;
+      case '--dry-run':
+      case '-d':
+        options.dryRun = true;
+        break;
+      case '--preserve-claude':
+        options.preserveClaude = true;
+        break;
+      case '--verbose':
+      case '-v':
+        options.verbose = true;
+        break;
+    }
+  });
+  
+  return options;
+}
+
+function analyzeInstallation() {
+  const installation = {
+    isInstalled: false,
+    files: [],
+    directories: [],
+    hasUserData: false
+  };
+  
+  // Check if mech-evolve is installed
+  if (fs.existsSync('.claude/project.json')) {
+    installation.isInstalled = true;
+    
+    // Analyze safe files
+    uninstallConfig.safeFiles.forEach(file => {
+      if (fs.existsSync(file)) {
+        installation.files.push({ path: file, safe: true, type: 'hook' });
+      }
+    });
+    
+    // Analyze conditional files
+    uninstallConfig.conditionalFiles.forEach(file => {
+      if (fs.existsSync(file)) {
+        installation.files.push({ path: file, safe: true, type: 'config' });
+      }
+    });
+    
+    // Analyze temp files
+    uninstallConfig.tempFiles.forEach(file => {
+      if (fs.existsSync(file)) {
+        installation.files.push({ path: file, safe: true, type: 'temp' });
+      }
+    });
+    
+    // Analyze directories
+    uninstallConfig.safeDirectories.forEach(dir => {
+      if (fs.existsSync(dir)) {
+        installation.directories.push({ path: dir, safe: true });
+      }
+    });
+    
+    // Check for CLI file
+    if (fs.existsSync('./mech-evolve')) {
+      installation.files.push({ path: './mech-evolve', safe: true, type: 'cli' });
+    }
+    
+    // Check for potential user data in .claude
+    if (fs.existsSync('.claude')) {
+      const claudeContents = fs.readdirSync('.claude');
+      const knownDirs = ['hooks', 'agent-context', 'agents'];
+      const knownFiles = ['project.json', 'settings-enhanced.json', 'settings.json', 'hook-debug.log'];
+      
+      claudeContents.forEach(item => {
+        if (!knownDirs.includes(item) && !knownFiles.includes(item)) {
+          installation.hasUserData = true;
+        }
+      });
+    }
+  }
+  
+  return installation;
+}
+
+function createBackup(options) {
+  if (!options.backup) return null;
+  
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupPath = `.claude-backup-${timestamp}.zip`;
+  
+  try {
+    console.log('📦 Creating backup...');
+    
+    // Simple backup - copy .claude directory
+    const backupDir = `.claude-backup-${timestamp}`;
+    fs.mkdirSync(backupDir, { recursive: true });
+    
+    // Copy .claude contents recursively
+    function copyRecursive(src, dest) {
+      if (fs.existsSync(src)) {
+        const stat = fs.lstatSync(src);
+        if (stat.isDirectory()) {
+          fs.mkdirSync(dest, { recursive: true });
+          const files = fs.readdirSync(src);
+          files.forEach(file => {
+            copyRecursive(path.join(src, file), path.join(dest, file));
+          });
+        } else {
+          fs.copyFileSync(src, dest);
+        }
+      }
+    }
+    
+    if (fs.existsSync('.claude')) {
+      copyRecursive('.claude', path.join(backupDir, '.claude'));
+    }
+    
+    // Copy CLI file if exists
+    if (fs.existsSync('./mech-evolve')) {
+      fs.copyFileSync('./mech-evolve', path.join(backupDir, 'mech-evolve'));
+    }
+    
+    console.log(`✅ Backup created: ${backupDir}`);
+    return backupDir;
+  } catch (error) {
+    console.log('⚠️  Backup failed:', error.message);
+    return null;
+  }
+}
+
+function executeRemoval(installation, options) {
+  let removedCount = 0;
+  const errors = [];
+  
+  if (options.verbose) {
+    console.log('🗑️  Starting removal process...');
+  }
+  
+  // Remove files
+  installation.files.forEach(file => {
+    try {
+      if (options.dryRun) {
+        console.log(`Would remove: ${file.path} (${file.type})`);
+      } else {
+        if (fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+          removedCount++;
+          if (options.verbose) {
+            console.log(`   ✅ Removed: ${file.path}`);
+          }
+        }
+      }
+    } catch (error) {
+      errors.push(`Failed to remove ${file.path}: ${error.message}`);
+    }
+  });
+  
+  // Remove directories (in reverse order to handle nested dirs)
+  installation.directories.reverse().forEach(dir => {
+    try {
+      if (options.dryRun) {
+        console.log(`Would remove directory: ${dir.path}`);
+      } else {
+        if (fs.existsSync(dir.path)) {
+          // Remove directory contents recursively
+          function removeRecursive(dirPath) {
+            if (fs.existsSync(dirPath)) {
+              const files = fs.readdirSync(dirPath);
+              files.forEach(file => {
+                const filePath = path.join(dirPath, file);
+                const stat = fs.lstatSync(filePath);
+                if (stat.isDirectory()) {
+                  removeRecursive(filePath);
+                } else {
+                  fs.unlinkSync(filePath);
+                }
+              });
+              fs.rmdirSync(dirPath);
+            }
+          }
+          
+          removeRecursive(dir.path);
+          removedCount++;
+          if (options.verbose) {
+            console.log(`   ✅ Removed directory: ${dir.path}`);
+          }
+        }
+      }
+    } catch (error) {
+      errors.push(`Failed to remove directory ${dir.path}: ${error.message}`);
+    }
+  });
+  
+  // Remove .claude directory if empty and no user data
+  if (!options.preserveClaude && !installation.hasUserData) {
+    try {
+      if (options.dryRun) {
+        console.log('Would remove: .claude directory (if empty)');
+      } else {
+        if (fs.existsSync('.claude')) {
+          const claudeContents = fs.readdirSync('.claude');
+          if (claudeContents.length === 0) {
+            fs.rmdirSync('.claude');
+            if (options.verbose) {
+              console.log('   ✅ Removed empty .claude directory');
+            }
+          }
+        }
+      }
+    } catch (error) {
+      errors.push(`Failed to remove .claude directory: ${error.message}`);
+    }
+  }
+  
+  return { removedCount, errors };
+}
+
+function executeUninstall(args) {
+  const options = parseUninstallArgs(args);
+  
+  console.log('🔄 Mech-Evolve Uninstaller');
+  console.log('📋 Application ID:', getApplicationId());
+  console.log('');
+  
+  // Analyze installation
+  const installation = analyzeInstallation();
+  
+  if (!installation.isInstalled) {
+    console.log('⚠️  Mech-evolve is not installed in this project');
+    console.log('   No .claude/project.json found');
+    return;
+  }
+  
+  // Show removal plan
+  console.log('📝 Removal Plan:');
+  console.log(`   Files to remove: ${installation.files.length}`);
+  console.log(`   Directories to remove: ${installation.directories.length}`);
+  
+  if (options.verbose || options.dryRun) {
+    console.log('\\n📁 Files:');
+    installation.files.forEach(file => {
+      console.log(`   - ${file.path} (${file.type})`);
+    });
+    
+    console.log('\\n📁 Directories:');
+    installation.directories.forEach(dir => {
+      console.log(`   - ${dir.path}`);
+    });
+  }
+  
+  if (installation.hasUserData) {
+    console.log('\\n⚠️  Warning: .claude directory contains non-mech-evolve files');
+    console.log('   These will be preserved. Use --preserve-claude to keep directory structure');
+  }
+  
+  if (options.dryRun) {
+    console.log('\\n🔍 Dry run mode - no files will be removed');
+    executeRemoval(installation, options);
+    return;
+  }
+  
+  // Confirmation
+  if (!options.force) {
+    console.log('\\n❓ This will permanently remove mech-evolve from this project.');
+    console.log('   Type \"yes\" to continue: ');
+    
+    // Simple sync input for demo - in production, use readline
+    const readline = require('readline');
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    
+    rl.question('', (answer) => {
+      rl.close();
+      
+      if (answer.toLowerCase() !== 'yes') {
+        console.log('❌ Uninstall cancelled');
+        return;
+      }
+      
+      proceedWithUninstall();
+    });
+    
+    return;
+  }
+  
+  proceedWithUninstall();
+  
+  function proceedWithUninstall() {
+    // Create backup if requested
+    const backup = createBackup(options);
+    
+    // Disable evolution first
+    if (fs.existsSync('.claude/settings-enhanced.json')) {
+      try {
+        fs.writeFileSync('.claude/settings-enhanced.json', JSON.stringify({hooks: {}}, null, 2));
+        console.log('✅ Evolution tracking disabled');
+      } catch (error) {
+        console.log('⚠️  Could not disable evolution tracking:', error.message);
+      }
+    }
+    
+    // Execute removal
+    const result = executeRemoval(installation, options);
+    
+    // Report results
+    console.log('\\n🎯 Uninstall Results:');
+    console.log(`   ✅ Removed ${result.removedCount} items`);
+    
+    if (result.errors.length > 0) {
+      console.log(`   ❌ ${result.errors.length} errors:`);
+      result.errors.forEach(error => console.log(`      ${error}`));
+    }
+    
+    if (backup) {
+      console.log(`   📦 Backup saved: ${backup}`);
+    }
+    
+    // Final verification
+    const postInstallation = analyzeInstallation();
+    if (postInstallation.isInstalled) {
+      console.log('\\n⚠️  Mech-evolve may not be completely removed');
+      console.log('   Run with --verbose to see detailed removal process');
+    } else {
+      console.log('\\n🎉 Mech-evolve successfully uninstalled!');
+      console.log('   Project is clean and ready for other tools');
+    }
+  }
+}
+
 const settings = {
   hooks: {
     PreToolUse: [{
@@ -191,8 +558,13 @@ switch (command) {
     req.end();
     break;
     
+  case 'remove':
+  case 'uninstall':
+    executeUninstall(process.argv.slice(3));
+    break;
+    
   default:
-    console.log('Usage: ./mech-evolve [on|off|status|agents|create]');
+    console.log('Usage: ./mech-evolve [on|off|status|agents|create|remove]');
     console.log('');
     console.log('Commands:');
     console.log('  on      - Enable evolution tracking');
@@ -200,4 +572,12 @@ switch (command) {
     console.log('  status  - Check evolution status');
     console.log('  agents  - List active agents');
     console.log('  create  - Create agents for this project');
+    console.log('  remove  - Completely uninstall mech-evolve from this project');
+    console.log('');
+    console.log('Remove options:');
+    console.log('  --force, -f       Force removal without confirmation');
+    console.log('  --backup, -b      Create backup before removal');
+    console.log('  --dry-run, -d     Show what would be removed');
+    console.log('  --preserve-claude Keep .claude directory structure');
+    console.log('  --verbose, -v     Detailed output during removal');
 }

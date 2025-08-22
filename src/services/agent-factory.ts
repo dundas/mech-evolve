@@ -360,7 +360,7 @@ export class AgentFactory {
   }
 
   private generateAgentId(applicationId: string, agentName: string): string {
-    return `${applicationId}_${agentName.toLowerCase().replace(/\s+/g, '-')}_${Date.now()}`;
+    return `${applicationId}_${agentName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}_${Date.now()}`;
   }
 
   private async storeAgentEcosystem(applicationId: string, agents: DynamicAgent[]): Promise<void> {

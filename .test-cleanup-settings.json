@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/evolve-hook.cjs"
+          },
+          {
+            "type": "command",
+            "command": "other-hook"
+          }
+        ]
+      }
+    ]
+  }
+}

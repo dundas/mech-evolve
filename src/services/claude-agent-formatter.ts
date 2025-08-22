@@ -269,7 +269,7 @@ Good documentation is the best investment in code maintainability.`
    */
   private createDefaultAgent(agent: DynamicAgent): ClaudeCodeAgent {
     return {
-      name: agent.name.toLowerCase().replace(/\s+/g, '-'),
+      name: agent.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
       description: `${agent.purpose}. ${agent.tier === 1 ? 'Use PROACTIVELY' : 'Use when requested'} for ${agent.role} tasks.`,
       proactive: agent.tier === 1,
       tools: ['Read', 'Edit', 'Grep', 'Bash'],

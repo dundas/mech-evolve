@@ -258,7 +258,7 @@ class AgentFactory {
         return await this.agentsCollection.find({ applicationId }).toArray();
     }
     generateAgentId(applicationId, agentName) {
-        return `${applicationId}_${agentName.toLowerCase().replace(/\s+/g, '-')}_${Date.now()}`;
+        return `${applicationId}_${agentName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}_${Date.now()}`;
     }
     async storeAgentEcosystem(applicationId, agents) {
         const ecosystem = {

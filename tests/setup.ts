@@ -166,11 +166,10 @@ export const createTestCodebaseAnalysis = (overrides = {}) => ({
   },
   patterns: [
     {
-      type: 'testing',
+      name: 'testing',
       description: 'Jest testing framework detected',
       confidence: 0.9,
-      impact: 'high' as const,
-      locations: ['tests/', 'jest.config.js']
+      files: ['tests/', 'jest.config.js']
     }
   ],
   suggestedAgents: [

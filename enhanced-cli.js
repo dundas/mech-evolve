@@ -13,7 +13,7 @@ if (major < 14) {
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const EVOLVE_URL = process.env.MECH_EVOLVE_URL || 'http://evolve.mech.is';
+const EVOLVE_URL = process.env.MECH_EVOLVE_URL || 'https://evolve.mech.is';
 const CLI_VERSION = '2.0.0';
 const command = process.argv[2] || 'help';
 const args = process.argv.slice(3);
@@ -760,7 +760,7 @@ function commandCreate() {
   
   const options = {
     hostname: new URL(EVOLVE_URL).hostname,
-    port: new URL(EVOLVE_URL).port || 80,
+    port: new URL(EVOLVE_URL).port || 443,
     path: '/api/agents/analyze-project',
     method: 'POST',
     headers: {

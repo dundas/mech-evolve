@@ -266,7 +266,7 @@ if (major < 14) {
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const EVOLVE_URL = process.env.MECH_EVOLVE_URL || 'http://evolve.mech.is';
+const EVOLVE_URL = process.env.MECH_EVOLVE_URL || 'https://evolve.mech.is';
 const CLI_VERSION = '2.1.0';
 const command = process.argv[2] || 'help';
 const args = process.argv.slice(3);
@@ -958,9 +958,11 @@ function commandAgents(args) {
     console.log(c.yellow('📊 Checking agents for:'), getApplicationId());
     
     const http = require('http');
+    const https = require('https');
     const url = new URL(\`/api/agents/\${getApplicationId()}\`, EVOLVE_URL);
+    const client = url.protocol === 'https:' ? https : http;
     
-    http.get(url, (res) => {
+    client.get(url, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
@@ -1013,7 +1015,7 @@ function commandCreate() {
   
   const options = {
     hostname: new URL(EVOLVE_URL).hostname,
-    port: new URL(EVOLVE_URL).port || 80,
+    port: new URL(EVOLVE_URL).port || 443,
     path: '/api/agents/analyze-project',
     method: 'POST',
     headers: {
@@ -1193,13 +1195,15 @@ function checkServiceConnectivity() {
 function testServiceConnectivity() {
   return new Promise((resolve) => {
     const http = require('http');
+    const https = require('https');
     const url = new URL('/health', EVOLVE_URL);
+    const client = url.protocol === 'https:' ? https : http;
     
     const timeout = setTimeout(() => {
       resolve(false);
     }, 5000);
     
-    http.get(url, (res) => {
+    client.get(url, (res) => {
       clearTimeout(timeout);
       resolve(res.statusCode === 200);
     }).on('error', () => {
@@ -1226,7 +1230,7 @@ app.get('/start', (req: Request, res: Response) => {
 
 set -e
 
-EVOLVE_URL="http://evolve.mech.is" 
+EVOLVE_URL="https://evolve.mech.is" 
 
 # Colors for pretty output
 RED='\\033[0;31m'
@@ -1315,7 +1319,7 @@ step "Installing evolution hook..."
 cat > "\$CLAUDE_DIR/hooks/evolve-hook.cjs" << 'EOFHOOK'
 #!/usr/bin/env node
 const http=require('http'),https=require('https'),os=require('os'),path=require('path');
-const EVOLVE_URL=process.env.MECH_EVOLVE_URL||'http://evolve.mech.is';
+const EVOLVE_URL=process.env.MECH_EVOLVE_URL||'https://evolve.mech.is';
 const TOOL_NAME=process.env.tool_name||'';
 if(!['Edit','Write','MultiEdit','Bash'].includes(TOOL_NAME))process.exit(0);
 function getApplicationId(){try{const PM=require('./project-id-manager.cjs');return new PM(process.cwd()).getApplicationId();}catch(e){return\`fallback-\${path.basename(process.cwd())}-\${Date.now()}\`;}}

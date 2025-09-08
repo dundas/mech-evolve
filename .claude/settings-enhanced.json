@@ -1,0 +1,32 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/context-provider.cjs"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/evolve-hook-enhanced.cjs"
+          }
+        ]
+      }
+    ]
+  },
+  "agentIntegration": {
+    "enabled": true,
+    "contextRefreshInterval": 300000,
+    "cacheTimeout": 300000,
+    "fallbackMode": "graceful"
+  }
+}

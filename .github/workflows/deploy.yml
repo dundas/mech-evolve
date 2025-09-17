@@ -1,0 +1,73 @@
+name: Deploy Mech Evolve
+
+on:
+  push:
+    branches: [ deploy, main ]
+
+env:
+  DOCKER_REPOSITORY: derivativelabs/mech-evolve
+
+jobs:
+  deploy:
+    name: Deploy to Docker Cloud
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/deploy' || github.ref == 'refs/heads/main')
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_HUB_USERNAME }}
+        password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.DOCKER_REPOSITORY }}
+        tags: |
+          type=ref,event=branch
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Generate deployment summary
+      run: |
+        echo "## =€ Docker Image Built and Pushed" >> $GITHUB_STEP_SUMMARY
+        echo "- **Repository**: \`${{ env.DOCKER_REPOSITORY }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Branch**: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Commit**: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Tags**: \`${{ steps.meta.outputs.tags }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Platforms**: linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### =æ Docker Pull Commands" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+        echo "# Pull the image" >> $GITHUB_STEP_SUMMARY
+        echo "docker pull ${{ env.DOCKER_REPOSITORY }}:${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "= **View on Docker Hub**: https://hub.docker.com/r/${{ env.DOCKER_REPOSITORY }}" >> $GITHUB_STEP_SUMMARY
+
+    - name: Deployment summary
+      run: |
+        echo " Docker image built successfully!"
+        echo "=3 Image pushed to Docker Hub"
+        echo "=Ë Repository: ${{ env.DOCKER_REPOSITORY }}"
+        echo "<? Branch: ${{ github.ref_name }}"
+        echo "=Ý Commit: ${{ github.sha }}"
+        echo "=€ Deployment completed successfully!"
